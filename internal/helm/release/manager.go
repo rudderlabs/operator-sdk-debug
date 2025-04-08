@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	jsonpatch "gomodules.xyz/jsonpatch/v3"
 	"helm.sh/helm/v3/pkg/action"
@@ -100,12 +101,15 @@ func (m manager) IsUpgradeRequired() bool {
 // Sync ensures the Helm storage backend is in sync with the status of the
 // custom resource.
 func (m *manager) Sync() error {
+	startTime := time.Now()
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Starting sync for %s in namespace %s at %v\n", m.releaseName, m.namespace, startTime)
 	// Get release history for this release name
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Getting release history for %s in namespace %s at %v\n", m.releaseName, m.namespace, time.Since(startTime))
 	releases, err := m.storageBackend.History(m.releaseName)
 	if err != nil && !notFoundErr(err) {
 		return fmt.Errorf("failed to retrieve release history: %w", err)
 	}
-
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Got release history for %s in namespace %s at %v\n", m.releaseName, m.namespace, time.Since(startTime))
 	// Cleanup non-deployed release versions. If all release versions are
 	// non-deployed, this will ensure that failed installations are correctly
 	// retried.
@@ -117,15 +121,17 @@ func (m *manager) Sync() error {
 			}
 		}
 	}
-
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Cleaned up stale release versions for %s in namespace %s at %v\n", m.releaseName, m.namespace, time.Since(startTime))
 	// Load the most recently deployed release from the storage backend.
 	deployedRelease, err := m.getDeployedRelease()
 	if errors.Is(err, driver.ErrReleaseNotFound) {
+		fmt.Printf("RECONCILING_SPECIFIC_LOG No deployed release found for %s in namespace %s at %v\n", m.releaseName, m.namespace, time.Since(startTime))
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("failed to get deployed release: %w", err)
 	}
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Got deployed release for %s in namespace %s at %v\n", m.releaseName, m.namespace, time.Since(startTime))
 	m.deployedRelease = deployedRelease
 	m.isInstalled = true
 
@@ -137,6 +143,7 @@ func (m *manager) Sync() error {
 	if deployedRelease.Manifest != candidateRelease.Manifest {
 		m.isUpgradeRequired = true
 	}
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Got candidate release for %s in namespace %s at %v\n", m.releaseName, m.namespace, time.Since(startTime))
 
 	return nil
 }

@@ -226,6 +226,7 @@ func (r HelmOperatorReconciler) Reconcile(ctx context.Context, request reconcile
 		Status: types.StatusTrue,
 	})
 
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Syncing release for %s in namespace %s at %v\n", o.GetName(), o.GetNamespace(), time.Since(startTime))
 	if err := manager.Sync(); err != nil {
 		log.Error(err, "Failed to sync release")
 		status.SetCondition(types.HelmAppCondition{
