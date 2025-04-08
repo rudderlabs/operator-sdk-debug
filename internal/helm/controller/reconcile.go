@@ -77,6 +77,7 @@ const (
 // resources to match the expected release manifest.
 
 func (r HelmOperatorReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) { //nolint:gocyclo
+	startTime := time.Now()
 	o := &unstructured.Unstructured{}
 	o.SetGroupVersionKind(r.GVK)
 	o.SetNamespace(request.Namespace)
@@ -88,21 +89,25 @@ func (r HelmOperatorReconciler) Reconcile(ctx context.Context, request reconcile
 		"kind", o.GetKind(),
 	)
 	log.V(1).Info("Reconciling")
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Starting reconciliation for %s in namespace %s\n", o.GetName(), o.GetNamespace())
 
 	err := r.Client.Get(ctx, request.NamespacedName, o)
 	if apierrors.IsNotFound(err) {
+		fmt.Printf("RECONCILING_SPECIFIC_LOG Resource not found for %s in namespace %s\n", o.GetName(), o.GetNamespace())
 		return reconcile.Result{}, nil
 	}
 	if err != nil {
 		log.Error(err, "Failed to lookup resource")
 		return reconcile.Result{}, err
 	}
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Got lookup resource in %v for %s in namespace %s\n", time.Since(startTime), o.GetName(), o.GetNamespace())
 
 	manager, err := r.ManagerFactory.NewManager(o, r.OverrideValues, r.DryRunOption)
 	if err != nil {
 		log.Error(err, "Failed to get release manager")
 		return reconcile.Result{}, err
 	}
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Got release manager in %v for %s in namespace %s\n", time.Since(startTime), o.GetName(), o.GetNamespace())
 
 	status := types.StatusFor(o)
 	originalStatus := types.StatusFor(o.DeepCopy())
@@ -119,6 +124,7 @@ func (r HelmOperatorReconciler) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 	reconcileResult.RequeueAfter = finalReconcilePeriod
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Determined reconcile period in %v for %s in namespace %s\n", time.Since(startTime), o.GetName(), o.GetNamespace())
 
 	if o.GetDeletionTimestamp() != nil {
 		if !(controllerutil.ContainsFinalizer(o, uninstallFinalizer) ||
@@ -233,6 +239,7 @@ func (r HelmOperatorReconciler) Reconcile(ctx context.Context, request reconcile
 		}
 		return reconcile.Result{}, err
 	}
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Synced release in %v for %s in namespace %s\n", time.Since(startTime), o.GetName(), o.GetNamespace())
 	status.RemoveCondition(types.ConditionIrreconcilable)
 
 	if !manager.IsInstalled() {
@@ -245,6 +252,7 @@ func (r HelmOperatorReconciler) Reconcile(ctx context.Context, request reconcile
 		}
 		installedRelease, err := manager.InstallRelease()
 		if err != nil {
+			fmt.Printf("RECONCILING_SPECIFIC_LOG Installation failed in %v for %s in namespace %s: %v\n", time.Since(startTime), o.GetName(), o.GetNamespace(), err)
 			log.Error(err, "Release failed")
 			status.SetCondition(types.HelmAppCondition{
 				Type:    types.ConditionReleaseFailed,
@@ -267,10 +275,12 @@ func (r HelmOperatorReconciler) Reconcile(ctx context.Context, request reconcile
 		}
 
 		if r.releaseHook != nil {
+			hookStartTime := time.Now()
 			if err := r.releaseHook(installedRelease); err != nil {
-				log.Error(err, "Failed to run release hook")
+				fmt.Printf("RECONCILING_SPECIFIC_LOG Release hook failed in %v for %s in namespace %s: %v\n", time.Since(startTime), o.GetName(), o.GetNamespace(), err)
 				return reconcile.Result{}, err
 			}
+			fmt.Printf("RECONCILING_SPECIFIC_LOG Completed release hook in %v for %s in namespace %s\n", time.Since(hookStartTime), o.GetName(), o.GetNamespace())
 		}
 
 		log.Info("Installed release")
@@ -343,10 +353,12 @@ func (r HelmOperatorReconciler) Reconcile(ctx context.Context, request reconcile
 		status.RemoveCondition(types.ConditionReleaseFailed)
 
 		if r.releaseHook != nil {
+			hookStartTime := time.Now()
 			if err := r.releaseHook(upgradedRelease); err != nil {
-				log.Error(err, "Failed to run release hook")
+				fmt.Printf("RECONCILING_SPECIFIC_LOG Release hook failed in %v for %s in namespace %s: %v\n", time.Since(startTime), o.GetName(), o.GetNamespace(), err)
 				return reconcile.Result{}, err
 			}
+			fmt.Printf("RECONCILING_SPECIFIC_LOG Completed release hook in %v for %s in namespace %s\n", time.Since(hookStartTime), o.GetName(), o.GetNamespace())
 		}
 
 		log.Info("Upgraded release", "force", force)
@@ -382,6 +394,7 @@ func (r HelmOperatorReconciler) Reconcile(ctx context.Context, request reconcile
 
 	expectedRelease, err := manager.ReconcileRelease(ctx)
 	if err != nil {
+		fmt.Printf("RECONCILING_SPECIFIC_LOG Reconcile release failed in %v for %s in namespace %s: %v\n", time.Since(startTime), o.GetName(), o.GetNamespace(), err)
 		log.Error(err, "Failed to reconcile release")
 		status.SetCondition(types.HelmAppCondition{
 			Type:    types.ConditionIrreconcilable,
@@ -394,13 +407,16 @@ func (r HelmOperatorReconciler) Reconcile(ctx context.Context, request reconcile
 		}
 		return reconcile.Result{}, err
 	}
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Reconciled release in %v for %s in namespace %s\n", time.Since(startTime), o.GetName(), o.GetNamespace())
 	status.RemoveCondition(types.ConditionIrreconcilable)
 
 	if r.releaseHook != nil {
+		hookStartTime := time.Now()
 		if err := r.releaseHook(expectedRelease); err != nil {
-			log.Error(err, "Failed to run release hook")
+			fmt.Printf("RECONCILING_SPECIFIC_LOG Release hook failed in %v for %s in namespace %s: %v\n", time.Since(startTime), o.GetName(), o.GetNamespace(), err)
 			return reconcile.Result{}, err
 		}
+		fmt.Printf("RECONCILING_SPECIFIC_LOG Completed release hook in %v for %s in namespace %s\n", time.Since(hookStartTime), o.GetName(), o.GetNamespace())
 	}
 
 	log.Info("Reconciled release")
@@ -423,10 +439,14 @@ func (r HelmOperatorReconciler) Reconcile(ctx context.Context, request reconcile
 		Manifest: expectedRelease.Manifest,
 	}
 
+	// Update status if needed
 	if !reflect.DeepEqual(status, originalStatus) {
+		statusStartTime := time.Now()
 		err = r.updateResourceStatus(ctx, o, status)
+		fmt.Printf("RECONCILING_SPECIFIC_LOG Updated status in %v for %s in namespace %s\n", time.Since(statusStartTime), o.GetName(), o.GetNamespace())
 	}
 
+	fmt.Printf("RECONCILING_SPECIFIC_LOG Completed full reconciliation in %v for %s in namespace %s\n", time.Since(startTime), o.GetName(), o.GetNamespace())
 	return reconcileResult, err
 }
 
