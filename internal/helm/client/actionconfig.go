@@ -84,6 +84,7 @@ func (acg *actionConfigGetter) getWatchedSecretsForNamespace(namespace string) *
 	acg.watchedSecretsMutex.Lock()
 	fmt.Println("LOCK_SPECIFIC_LOG getWatchedSecretsForNamespace", namespace, "locked")
 	if _, found := acg.watchedSecrets[namespace]; !found {
+		fmt.Println("LOCK_SPECIFIC_LOG getWatchedSecretsForNamespace", namespace, "creating new watched secrets")
 		acg.watchedSecrets[namespace] = NewWatchedSecrets(acg.kubeClientSet, namespace)
 		acg.watchedSecrets[namespace].Run()
 	}
