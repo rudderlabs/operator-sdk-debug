@@ -168,7 +168,6 @@ func (m manager) getCandidateRelease(namespace, name string, chart *cpb.Chart,
 	upgrade := action.NewUpgrade(m.actionConfig)
 	upgrade.Namespace = namespace
 	upgrade.DryRun = true
-	upgrade.DryRunOption = m.dryRunOption
 	return upgrade.Run(name, chart, values)
 }
 
